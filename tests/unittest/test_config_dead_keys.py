@@ -144,6 +144,14 @@ _ALLOWLIST = {
         "push_outputs",
         "slack_webhook_url",
     ): "_push_outputs_sink_url(cfg, \"slack_webhook_url\") in pr_agent/algo/run_output.py",
+    # [claude_code] is validated as a whole into ClaudeCodeSettings, whose field names are the keys
+    **{
+        ("claude_code", key): "ClaudeCodeSettings.from_dynaconf() field in "
+        "pr_agent/algo/ai_handlers/claude_code/cli_settings.py"
+        for key in (
+            "executable", "settings_file", "model", "bare", "max_concurrent_calls", "retry_attempts", "extra_args",
+        )
+    },
 }
 
 

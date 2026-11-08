@@ -374,3 +374,16 @@ def test_restore_settings_sections_removes_section_created_after_snapshot():
         assert "CUSTOM_SECTION_FOR_TEST" not in settings.as_dict()
     finally:
         _restore_settings_sections(settings, original_snapshot)
+
+
+def test_repo_settings_cannot_override_claude_code_executable(monkeypatch, settings_snapshot):
+    provider = FakeGitProvider(repo_settings_bytes=b'[claude_code]\nexecutable = "/bin/sh"\n')
+    _install_provider(monkeypatch, provider)
+
+    get_settings().set("config.use_repo_settings_file", True)
+    settings = get_settings()
+    executable_before = _section(settings, "claude_code").get("executable")
+
+    apply_repo_settings("https://example.com/owner/repo/pull/1")
+
+    assert _section(settings, "claude_code").get("executable") == executable_before

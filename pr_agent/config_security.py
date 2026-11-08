@@ -19,10 +19,15 @@
 # prompt_fragments: contains Jinja source rendered by the host before it is inserted into tool
 # prompts. Keep the whole section host-only so repository settings and comment arguments cannot
 # supply executable template expressions.
+#
+# claude_code: names an executable on the PR-Agent host, the settings file it loads (gateway URL
+# and credentials) and extra argv. A repo that could set these would run an arbitrary command on
+# the host or redirect review traffic, so the whole section is host-only.
 REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION = {
     "skills": frozenset({"enabled", "max_skills_tokens"}),
     "push_outputs": frozenset(),
     "prompt_fragments": frozenset(),
+    "claude_code": frozenset(),
 }
 
 # Individual settings in otherwise repository-configurable sections may also be

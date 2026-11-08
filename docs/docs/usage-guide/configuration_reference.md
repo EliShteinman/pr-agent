@@ -421,6 +421,19 @@ _This section only documents commented-out examples; see the [TOML source](https
 | `project_keys` | [] | Optional allowlist of Jira project keys, e.g. ["PROJ", "OPS"]. When non-empty, key-shaped text with another prefix ("SHA-256", "UTF-8", "ISO-8601") is dropped before any lookup, so it no longer costs an authenticated 404 each. Entries must be plain upper-case keys; a supplied list with no valid entry disables the lookup rather than widening it. Empty (default) looks up every key found. |
 
 
+## `[claude_code]` {#claude_code}
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `executable` | "claude" | name on PATH, or an absolute path to the Claude Code CLI |
+| `settings_file` | "" | path to the Claude Code settings.json passed with --settings (gateway URL, auth token, model, env); empty = the CLI's own environment |
+| `model` | "" | optional --model for the CLI; empty = the model the settings file (or CLI default) selects. config.model is not forwarded |
+| `bare` | true | add --bare: skip hooks, plugins, CLAUDE.md discovery and keychain reads; the settings file still applies |
+| `max_concurrent_calls` | 4 | CLI processes allowed to run at once per event loop (a webhook server serves several merge requests concurrently) |
+| `retry_attempts` | 2 | attempts on the same model for transient failures (429, 5xx, unreadable output); auth errors and timeouts are never retried |
+| `extra_args` | [] | additional CLI flags appended verbatim, e.g. ["--effort", "high"] |
+
+
 ## `[litellm]` {#litellm}
 
 | Key | Default | Description |
