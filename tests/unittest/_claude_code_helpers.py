@@ -24,7 +24,8 @@ if mode == "garbage":
 if mode == "auth":
     print(json.dumps({"is_error": True, "api_error_status": 401, "result": "Failed to authenticate"}))
     sys.exit(1)
-echo = {"argv": argv, "user": user, "system": system, "cwd": os.getcwd()}
+echo = {"argv": argv, "user": user, "system": system, "cwd": os.getcwd(),
+        "extra_ca": os.environ.get("NODE_EXTRA_CA_CERTS")}
 print(json.dumps({"is_error": False, "result": json.dumps(echo), "stop_reason": "end_turn",
                   "total_cost_usd": 0.01, "usage": {"input_tokens": 3, "output_tokens": 2}}))
 """

@@ -215,6 +215,28 @@ Claude Code reads the gateway address and credentials from its `settings.json`:
 
 The image reads the file from `/etc/claude-code/settings.json`. To read it from another path, set the `CLAUDE_CODE__SETTINGS_FILE` environment variable. Write the name in upper case: the image already sets it, and a lower-case `claude_code__settings_file` does not override it. All `[claude_code]` options are listed in the [configuration reference](../usage-guide/configuration_reference.md#claude_code).
 
+### Custom CA certificates
+
+If the gateway's certificate is signed by a private CA, or a TLS-inspecting proxy sits in between, make the CA bundle (PEM) available in the container and point `SSL_CERT_FILE` at it, as described in [Custom CA and Self-Signed Certificates](../usage-guide/custom_ca_and_self_signed_certificates.md). The Claude Code CLI ignores `SSL_CERT_FILE` and reads only `NODE_EXTRA_CA_CERTS`, so PR-Agent passes the same bundle to it under that name. To give the CLI a different bundle, set `NODE_EXTRA_CA_CERTS` yourself, in the environment or in the `env` block of `settings.json`.
+
+In Kubernetes or OpenShift, keep the bundle in a ConfigMap and mount it:
+
+```yaml
+# Deployment container
+env:
+  - name: SSL_CERT_FILE
+    value: /etc/pr-agent-ca/ca-bundle.crt
+volumeMounts:
+  - name: ca-bundle
+    mountPath: /etc/pr-agent-ca
+    readOnly: true
+# Deployment pod spec
+volumes:
+  - name: ca-bundle
+    configMap:
+      name: corporate-ca-bundle   # kubectl create configmap corporate-ca-bundle --from-file=ca-bundle.crt
+```
+
 ### In a pipeline
 
 (1) In CI/CD -> Variables, add a variable of type **File** with the key `CLAUDE_CODE__SETTINGS_FILE`, and paste the content of your `settings.json` as its value. GitLab writes the content to a temporary file and puts that file's path in the variable, so the image picks it up without any script step. File variables cannot be masked, so never print the file in the job.

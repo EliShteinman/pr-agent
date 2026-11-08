@@ -1,4 +1,5 @@
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 
@@ -12,6 +13,21 @@ from pr_agent.log import get_logger
 WORKDIR_PREFIX = "pr-agent-claude-code-"
 SYSTEM_PROMPT_FILENAME = "system_prompt.txt"
 PROMPT_ENCODING = "utf-8"
+# PR-Agent's documented CA trust variable; the CLI ignores it and reads only its own one.
+PR_AGENT_CA_BUNDLE_VARIABLE = "SSL_CERT_FILE"
+CLI_EXTRA_CA_VARIABLE = "NODE_EXTRA_CA_CERTS"
+
+
+def cli_environment(environment: dict[str, str]) -> dict[str, str]:
+    """Return the CLI's environment, trusting the same CA bundle as the rest of PR-Agent.
+
+    An explicit NODE_EXTRA_CA_CERTS wins, and settings.json `env` still overrides both.
+    """
+    cli_env: dict[str, str] = dict(environment)
+    ca_bundle: str = cli_env.get(PR_AGENT_CA_BUNDLE_VARIABLE, "")
+    if ca_bundle and not cli_env.get(CLI_EXTRA_CA_VARIABLE):
+        cli_env[CLI_EXTRA_CA_VARIABLE] = ca_bundle
+    return cli_env
 
 
 class CliOutcome(BaseModel):
@@ -59,6 +75,7 @@ class ClaudeCodeRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=workdir,
+                env=cli_environment(dict(os.environ)),
             )
         except OSError as error:
             raise ClaudeCodeTransientError(f"Failed to start the Claude Code CLI: {error}") from error

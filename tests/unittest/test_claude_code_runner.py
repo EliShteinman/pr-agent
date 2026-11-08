@@ -7,7 +7,7 @@ import pytest
 from pr_agent.algo.ai_handlers.claude_code.command import ClaudeCodeCommand
 from pr_agent.algo.ai_handlers.claude_code.errors import ClaudeCodeTimeoutError
 from pr_agent.algo.ai_handlers.claude_code.process_slots import ProcessSlots
-from pr_agent.algo.ai_handlers.claude_code.runner import WORKDIR_PREFIX, ClaudeCodeRunner
+from pr_agent.algo.ai_handlers.claude_code.runner import WORKDIR_PREFIX, ClaudeCodeRunner, cli_environment
 from tests.unittest._claude_code_helpers import build_settings, write_fake_cli
 
 TIMEOUT_SECONDS = 20.0
@@ -79,3 +79,24 @@ async def test_process_slots_cap_concurrency():
     await asyncio.gather(*(occupy() for _ in range(6)))
 
     assert peak[0] == 2
+
+
+@pytest.mark.parametrize("environment, expected", [
+    ({"SSL_CERT_FILE": "/ca/bundle.crt"}, "/ca/bundle.crt"),
+    ({"SSL_CERT_FILE": "/ca/bundle.crt", "NODE_EXTRA_CA_CERTS": "/ca/explicit.crt"}, "/ca/explicit.crt"),
+    ({"SSL_CERT_FILE": ""}, None),
+    ({}, None),
+])
+def test_cli_trusts_pr_agent_ca_bundle(environment, expected):
+    assert cli_environment(environment).get("NODE_EXTRA_CA_CERTS") == expected
+
+
+def test_cli_environment_keeps_other_variables():
+    assert cli_environment({"HOME": "/home/claude-code"})["HOME"] == "/home/claude-code"
+
+
+async def test_ca_bundle_reaches_cli_process(runner, monkeypatch):
+    monkeypatch.delenv("NODE_EXTRA_CA_CERTS", raising=False)
+    monkeypatch.setenv("SSL_CERT_FILE", "/ca/bundle.crt")
+
+    assert (await _echo(runner))["extra_ca"] == "/ca/bundle.crt"

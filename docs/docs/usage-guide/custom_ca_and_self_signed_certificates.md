@@ -47,3 +47,5 @@ For a runner behind a corporate proxy with a custom CA:
 1. Export `SSL_CERT_FILE` pointing to your CA bundle. `REQUESTS_CA_BUNDLE` and `GIT_SSL_CAINFO` cover git clone only.
 2. Set `litellm.disable_aiohttp = true` in your configuration.
 3. If you also use the GitLab API, keep `gitlab.ssl_verify` pointed at the same bundle for the python-gitlab client.
+
+With `config.ai_handler="claude_code"`, the Claude Code CLI makes the LLM call instead of LiteLLM. PR-Agent passes `SSL_CERT_FILE` to the CLI as `NODE_EXTRA_CA_CERTS`, the only CA variable the CLI reads, so step 2 is not needed. See [Send completions through Claude Code](../installation/gitlab.md#custom-ca-certificates).
