@@ -387,3 +387,16 @@ def test_repo_settings_cannot_override_claude_code_executable(monkeypatch, setti
     apply_repo_settings("https://example.com/owner/repo/pull/1")
 
     assert _section(settings, "claude_code").get("executable") == executable_before
+
+
+def test_repo_settings_cannot_switch_ai_handler(monkeypatch, settings_snapshot):
+    provider = FakeGitProvider(repo_settings_bytes=b'[config]\nai_handler = "claude_code"\n')
+    _install_provider(monkeypatch, provider)
+
+    get_settings().set("config.use_repo_settings_file", True)
+    settings = get_settings()
+    handler_before = _section(settings, "config").get("ai_handler")
+
+    apply_repo_settings("https://example.com/owner/repo/pull/1")
+
+    assert _section(settings, "config").get("ai_handler") == handler_before

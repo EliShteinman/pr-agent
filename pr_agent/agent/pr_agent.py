@@ -9,7 +9,7 @@ from opentelemetry.trace import StatusCode
 from starlette_context import context, request_cycle_context
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
-from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+from pr_agent.algo.ai_handlers.handler_factory import get_ai_handler_class
 from pr_agent.algo.artifacts import reapply_artifact_context
 from pr_agent.algo.cli_args import CliArgs
 from pr_agent.algo.comment_identity import add_comment_identity, comment_matches_identity
@@ -267,8 +267,17 @@ def prepare_command(command: str) -> list[str]:
 
 
 class PRAgent:
-    def __init__(self, ai_handler: partial[BaseAiHandler,] = LiteLLMAIHandler):
-        self.ai_handler = ai_handler  # handler factory passed to each tool when it is instantiated
+    def __init__(self, ai_handler: partial[BaseAiHandler,] | type[BaseAiHandler] | None = None):
+        self._injected_ai_handler = ai_handler
+
+    @property
+    def ai_handler(self) -> partial[BaseAiHandler,] | type[BaseAiHandler]:
+        """Handler factory passed to each tool when it is instantiated.
+
+        Read per command rather than in __init__, so request-scoped settings applied after the
+        agent is built still decide which client carries the traffic.
+        """
+        return self._injected_ai_handler or get_ai_handler_class()
 
     async def _handle_request(
         self, pr_url, request, notify=None, propagate_tool_errors: bool | None = None

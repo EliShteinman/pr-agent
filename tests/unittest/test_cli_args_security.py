@@ -89,12 +89,16 @@ FORBIDDEN_ARGS = [
     "--config.description_issue_regex=(?:[A-Za-z ]+)+X(d+)",
     "--config__description_issue_regex=(?:[A-Za-z ]+)+X(d+)",
     '--config={"description_issue_regex": "(?:[A-Za-z ]+)+X(d+)"}',
-    # claude_code names a host executable, its settings file and argv: an operator decision.
+    # claude_code names a host executable, its settings file and argv; ai_handler picks which
+    # client carries review traffic. Both are operator decisions.
     "--claude_code.executable=/bin/sh",
     "--claude_code.settings_file=/etc/passwd",
     '--claude_code.extra_args=["--tools", "Bash"]',
     "--claude_code__executable=/bin/sh",
     '--claude_code={"executable": "/bin/sh"}',
+    "--config.ai_handler=litellm",
+    "--config__ai_handler=litellm",
+    '--config={"ai_handler": "litellm"}',
     # section-level mapping values on sections that are not host-only themselves:
     # the dotted keys below are all rejected, so their {key: value} forms must be too
     '--qdrant={url: "https://evil.example", api_key: "x"}',

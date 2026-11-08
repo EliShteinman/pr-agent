@@ -55,6 +55,7 @@ to-do list.
 | `disable_auto_feedback` | false |  |
 | `enable_auto_approval` | false | when true, /review may auto-approve a PR via auto_approve_logic(); that caller is currently commented out |
 | `ai_timeout` | 120 | 2 minutes |
+| `ai_handler` | "litellm" | client that performs completions: "litellm" (direct model API call) or "claude_code" (each call runs the Claude Code CLI, see [claude_code]). Host-only |
 | `retry_same_model_on_timeout` | true | when false, a timed-out call is not retried on the same model and moves on to fallback_models |
 | `skip_keys` | [] |  |
 | `custom_reasoning_model` | false | when true, disables system messages and temperature controls for models that don't support chat-style inputs |

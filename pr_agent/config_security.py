@@ -57,7 +57,10 @@ REPO_HOST_ONLY_KEYS_BY_SECTION = {
     # would otherwise repoint that fetch to an arbitrary internal URL (SSRF), exfiltrate the
     # auth header, and override secrets/model routing/output sinks wholesale. CLI arguments
     # for it are already blocked; the repo-settings entry point now matches.
+    # ai_handler selects the client that carries review traffic off the host; switching it
+    # is an operator decision about where data goes, so neither a repo nor a comment may.
     "config": frozenset({
+        "ai_handler",
         "extra_config_url",
         "description_issue_regex",
         "repo_context_max_sibling_files",
