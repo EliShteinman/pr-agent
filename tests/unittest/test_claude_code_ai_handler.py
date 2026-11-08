@@ -107,4 +107,4 @@ async def test_end_to_end_cli_receives_operator_settings_file(tmp_path: Path):
     response, _ = await handler.chat_completion(model="ignored", system="sys", user="usr")
     argv: list[str] = json.loads(response)["argv"]
 
-    assert argv[argv.index("--settings") + 1] == str(settings_file.resolve())
+    assert argv[argv.index("--settings") + 1] == str(settings_file.absolute())

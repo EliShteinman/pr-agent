@@ -49,7 +49,7 @@ def test_omits_bare_when_disabled():
 def test_passes_settings_file_as_absolute_path(settings_file: Path):
     argv: list[str] = ClaudeCodeCommand(build_settings(settings_file=str(settings_file))).build(None)
 
-    assert _value_after(argv, "--settings") == str(settings_file.resolve())
+    assert _value_after(argv, "--settings") == str(settings_file.absolute())
 
 
 def test_omits_settings_flag_when_no_file_configured():
@@ -90,3 +90,12 @@ def test_missing_executable_is_a_configuration_error():
 def test_missing_settings_file_is_a_configuration_error(tmp_path: Path):
     with pytest.raises(ClaudeCodeConfigurationError):
         ClaudeCodeCommand(build_settings(settings_file=str(tmp_path / "absent.json")))
+
+
+def test_keeps_symlinked_settings_file_path(tmp_path: Path, settings_file: Path):
+    mounted: Path = tmp_path / "mounted-settings.json"
+    mounted.symlink_to(settings_file)
+
+    argv: list[str] = ClaudeCodeCommand(build_settings(settings_file=str(mounted))).build(None)
+
+    assert _value_after(argv, "--settings") == str(mounted)

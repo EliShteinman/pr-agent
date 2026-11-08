@@ -56,4 +56,6 @@ class ClaudeCodeCommand:
         path = Path(settings_file).expanduser()
         if not path.is_file():
             raise ClaudeCodeConfigurationError(f"claude_code.settings_file '{settings_file}' is not a readable file")
-        return str(path.resolve())
+        # Not resolve(): a Kubernetes Secret mount is a symlink into a timestamped directory that a
+        # Secret update deletes, while the symlink itself keeps pointing at the current file.
+        return str(path.absolute())
