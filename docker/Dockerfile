@@ -45,6 +45,47 @@ FROM base AS gitlab_webhook
 COPY pr_agent pr_agent
 CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-c", "pr_agent/servers/gunicorn_config.py", "--forwarded-allow-ips", "*", "pr_agent.servers.gitlab_webhook:app"]
 
+# GitLab with completions sent through the Claude Code CLI (config.ai_handler="claude_code"), for
+# gateways that only accept a Claude Code client. One image serves both GitLab modes: run it as is
+# for the webhook server, or use it as a pipeline job image (entrypoint [""], then
+# `python -m pr_agent.cli ...`). Mount the operator's settings.json at the path below, or point
+# claude_code__settings_file at another one.
+FROM base AS gitlab_claude_code
+# Pinned so a rebuild cannot silently change the CLI; override with --build-arg CLAUDE_CODE_VERSION=x.y.z.
+ARG CLAUDE_CODE_VERSION=2.1.319
+ARG TARGETARCH
+# The upstream install.sh resolves "latest" and installs into one user's ~/.local. Fetch the
+# pinned zstd build instead, verify it against the release manifest's checksum, and install it
+# where any UID can run it.
+RUN set -eux; \
+    apt-get update && apt-get install --no-install-recommends -y zstd && apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) platform="linux-x64" ;; \
+      arm64) platform="linux-arm64" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    release="https://downloads.claude.ai/claude-code-releases/${CLAUDE_CODE_VERSION}"; \
+    fetch() { curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o "$2" "$1"; }; \
+    fetch "${release}/manifest.zst.json" /tmp/manifest.json; \
+    checksum="$(python -c "import json,sys; print(json.load(open('/tmp/manifest.json'))['platforms'][sys.argv[1]]['checksum'])" "${platform}")"; \
+    fetch "${release}/${platform}/claude.zst" /tmp/claude.zst; \
+    echo "${checksum}  /tmp/claude.zst" | sha256sum -c -; \
+    zstd -d -q /tmp/claude.zst -o /usr/local/bin/claude; \
+    chmod 0755 /usr/local/bin/claude; \
+    rm -f /tmp/claude.zst /tmp/manifest.json; \
+    claude --version
+# The CLI writes state under $HOME on every run. Platforms such as OpenShift or a Kubernetes
+# GitLab runner start the container under an arbitrary UID in group 0, so HOME is group-writable.
+ENV HOME=/home/claude-code
+RUN mkdir -p "${HOME}" && chgrp 0 "${HOME}" && chmod 0775 "${HOME}"
+# A container must not update its own CLI, and a gateway-only network has no route for telemetry.
+ENV DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    CONFIG__AI_HANDLER=claude_code \
+    CLAUDE_CODE__SETTINGS_FILE=/etc/claude-code/settings.json
+COPY pr_agent pr_agent
+CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-c", "pr_agent/servers/gunicorn_config.py", "--forwarded-allow-ips", "*", "pr_agent.servers.gitlab_webhook:app"]
+
 FROM base AS azure_devops_webhook
 COPY pr_agent pr_agent
 CMD ["python", "pr_agent/servers/azuredevops_server_webhook.py"]
