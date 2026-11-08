@@ -115,6 +115,8 @@ For all supported filters, see [Ignoring automatic commands in PRs](../usage-gui
 
 Note that if your base branches are not protected, don't set the variables as `protected`, since the pipeline will not have access to them.
 
+If your model gateway only accepts requests from a Claude Code client, see [Send completions through Claude Code](#send-completions-through-claude-code) instead of setting `OPENAI_KEY`.
+
 > **Note**: The `$CI_SERVER_FQDN` variable is available starting from GitLab version 16.10. If you're using an earlier version, this variable will not be available. However, you can combine `$CI_SERVER_HOST` and `$CI_SERVER_PORT` to achieve the same result. Please ensure you're using a compatible version or adjust your configuration.
 
 > **Note**: The `gitlab__SSL_VERIFY` environment variable can be used to specify the path to a custom CA certificate bundle for SSL verification. GitLab exposes the `$CI_SERVER_TLS_CA_FILE` variable, which points to the custom CA certificate file configured in your GitLab instance.
@@ -177,6 +179,71 @@ PORT=3000  # Optional: override the webhook server port
 9. Test your installation by opening a merge request or commenting on a merge request using one of PR Agent's commands.
 
 10. The webhook server runs under gunicorn with multiple worker processes. See [Sizing a self-hosted webhook server](./index.md#sizing-a-self-hosted-webhook-server) for the `GUNICORN_WORKERS` / `GUNICORN_MAX_WORKERS` knobs and memory guidance — worth reading before setting a memory limit.
+
+## Send completions through Claude Code
+
+Some model gateways accept requests only from a genuine [Claude Code](https://code.claude.com/docs) client, so PR-Agent cannot call the model API directly. With `config.ai_handler="claude_code"`, every AI call runs the Claude Code CLI instead. The CLI loads your `settings.json` (gateway URL, token, model) and sends the request itself. All Claude Code tools are disabled, so the model receives exactly the prompt PR-Agent built, as with a direct API call.
+
+This works for both the pipeline and the webhook server.
+
+### Build the image
+
+The `gitlab_claude_code` Docker target contains PR-Agent and a pinned Claude Code CLI, and selects `config.ai_handler="claude_code"`. Build it and push it to a registry your GitLab can pull from:
+
+```bash
+docker build -f docker/Dockerfile --target gitlab_claude_code -t registry.example.com/pr-agent:gitlab-claude-code .
+docker push registry.example.com/pr-agent:gitlab-claude-code
+```
+
+Add `--build-arg CLAUDE_CODE_VERSION=<version>` to pin a different CLI release, and `--platform linux/amd64` when building on an ARM machine for x86 runners.
+
+### The settings file
+
+Claude Code reads the gateway address and credentials from its `settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://llm-gateway.example.com",
+    "ANTHROPIC_AUTH_TOKEN": "<gateway token>"
+  },
+  "model": "<model name your gateway serves>"
+}
+```
+
+`ANTHROPIC_AUTH_TOKEN` is sent as `Authorization: Bearer`; use `ANTHROPIC_API_KEY` instead if your gateway expects an `x-api-key` header. The model comes from this file (or from `claude_code.model`); `config.model` is not forwarded to the CLI.
+
+The image reads the file from `/etc/claude-code/settings.json`. To read it from another path, set the `CLAUDE_CODE__SETTINGS_FILE` environment variable. Write the name in upper case: the image already sets it, and a lower-case `claude_code__settings_file` does not override it. All `[claude_code]` options are listed in the [configuration reference](../usage-guide/configuration_reference.md#claude_code).
+
+### In a pipeline
+
+(1) In CI/CD -> Variables, add a variable of type **File** with the key `CLAUDE_CODE__SETTINGS_FILE`, and paste the content of your `settings.json` as its value. GitLab writes the content to a temporary file and puts that file's path in the variable, so the image picks it up without any script step. File variables cannot be masked, so never print the file in the job.
+
+(2) Add the `GITLAB_PERSONAL_ACCESS_TOKEN` masked variable, as for the standard pipeline.
+
+(3) Use the image in `.gitlab-ci.yml`:
+
+```yaml
+stages:
+  - pr_agent
+
+pr_agent_job:
+  stage: pr_agent
+  image:
+    name: registry.example.com/pr-agent:gitlab-claude-code
+    entrypoint: [""]
+  script:
+    - cd /app
+    - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
+    - export gitlab__url=$CI_SERVER_PROTOCOL://$CI_SERVER_FQDN
+    - export gitlab__PERSONAL_ACCESS_TOKEN=$GITLAB_PERSONAL_ACCESS_TOKEN
+    - export config__git_provider="gitlab"
+    - python -m pr_agent.cli --pr_url="$MR_URL" describe
+    - python -m pr_agent.cli --pr_url="$MR_URL" review
+    - python -m pr_agent.cli --pr_url="$MR_URL" improve
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+```
 
 ## Deploy as a Lambda Function
 
