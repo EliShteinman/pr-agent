@@ -245,6 +245,72 @@ pr_agent_job:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 ```
 
+### With the webhook server
+
+Ready-to-use deployments are in `docker/gitlab_claude_code/`. Each needs the same three inputs, as for the [standard webhook server](#run-a-gitlab-webhook-server): the GitLab URL, a personal access token with `api` scope, and the webhook shared secret. The `settings.json` file is the fourth input. Each gunicorn worker runs up to `claude_code.max_concurrent_calls` (default 4) CLI processes at once; the examples set `GUNICORN_WORKERS=2`.
+
+After deploying, create the GitLab webhook as in step 8 of the standard webhook server, pointing at `https://<host>/webhook`.
+
+<details>
+<summary>Docker Compose</summary>
+
+```bash
+cd docker/gitlab_claude_code
+cp settings.json.example settings.json   # fill in the gateway URL, token and model
+cp pr-agent.env.example pr-agent.env     # fill in the GitLab URL, token and shared secret
+chmod 644 settings.json                  # the container runs as UID 10001 and must read it
+PR_AGENT_IMAGE=registry.example.com/pr-agent:gitlab-claude-code docker compose up -d
+```
+
+The server listens on port 3000 (`PR_AGENT_PORT` changes it); put a TLS-terminating reverse proxy in front of it. The filled-in `settings.json` and `pr-agent.env` are git-ignored.
+
+</details>
+
+<details>
+<summary>Kubernetes</summary>
+
+Create the two Secrets the manifest reads:
+
+```bash
+kubectl create secret generic pr-agent-claude-code-settings --from-file=settings.json=./settings.json
+kubectl create secret generic pr-agent-gitlab \
+  --from-literal=GITLAB__PERSONAL_ACCESS_TOKEN=<personal access token> \
+  --from-literal=GITLAB__SHARED_SECRET=<shared secret>
+```
+
+In `docker/gitlab_claude_code/kubernetes.yaml`, set the image, `GITLAB__URL`, the Ingress class and host, and the TLS Secret, then apply it:
+
+```bash
+kubectl apply -f docker/gitlab_claude_code/kubernetes.yaml
+```
+
+The pod runs as a non-root user with a read-only root file system; the CLI's state and per-call files go to `emptyDir` volumes. After you update the settings Secret, run `kubectl rollout restart deployment/pr-agent` so the new file is used everywhere at once.
+
+</details>
+
+<details>
+<summary>OpenShift</summary>
+
+Create the same two Secrets with `oc`:
+
+```bash
+oc create secret generic pr-agent-claude-code-settings --from-file=settings.json=./settings.json
+oc create secret generic pr-agent-gitlab \
+  --from-literal=GITLAB__PERSONAL_ACCESS_TOKEN=<personal access token> \
+  --from-literal=GITLAB__SHARED_SECRET=<shared secret>
+```
+
+In `docker/gitlab_claude_code/openshift.yaml`, set the image and `GITLAB__URL`, then apply it:
+
+```bash
+oc apply -f docker/gitlab_claude_code/openshift.yaml
+oc get route pr-agent -o jsonpath='{.spec.host}'   # the host for the GitLab webhook URL
+```
+
+The manifest sets no UID: the `restricted` SCC assigns an arbitrary one, which the image supports. The Route terminates TLS at the router.
+
+</details>
+
 ## Deploy as a Lambda Function
 
 Note that since AWS Lambda env vars cannot have "." in the name, you can replace each "." in an env variable with "__".<br>

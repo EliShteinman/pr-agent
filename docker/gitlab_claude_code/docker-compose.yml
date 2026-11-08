@@ -1,0 +1,26 @@
+# PR-Agent GitLab webhook server that sends every AI call through the Claude Code CLI.
+# Needs ./settings.json and ./pr-agent.env next to this file (copy the .example files).
+services:
+  pr-agent:
+    image: ${PR_AGENT_IMAGE:-pr-agent:gitlab_claude_code}
+    restart: unless-stopped
+    env_file: pr-agent.env
+    environment:
+      CONFIG__GIT_PROVIDER: gitlab
+      # Each worker runs up to claude_code.max_concurrent_calls (default 4) CLI processes at once.
+      GUNICORN_WORKERS: "2"
+    ports:
+      - "${PR_AGENT_PORT:-3000}:3000"
+    # Non-root, read-only image; the CLI's state and per-call temp files go to tmpfs.
+    user: "10001:0"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/claude-code:uid=10001,gid=0,mode=0770
+    volumes:
+      - ./settings.json:/etc/claude-code/settings.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

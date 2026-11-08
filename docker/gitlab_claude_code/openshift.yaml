@@ -1,0 +1,113 @@
+# PR-Agent GitLab webhook server that sends every AI call through the Claude Code CLI.
+# Create the two Secrets first (see the "Send completions through Claude Code" section of
+# docs/docs/installation/gitlab.md), set the image, then:
+#   oc apply -f openshift.yaml
+# No UID is set: the restricted SCC assigns an arbitrary one in group 0, which the image supports.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-agent
+  labels:
+    app.kubernetes.io/name: pr-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pr-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pr-agent
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: pr-agent
+          image: registry.example.com/pr-agent:gitlab-claude-code
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: CONFIG__GIT_PROVIDER
+              value: gitlab
+            - name: GITLAB__URL
+              value: https://gitlab.example.com
+            # Each worker runs up to claude_code.max_concurrent_calls (default 4) CLI processes at once.
+            - name: GUNICORN_WORKERS
+              value: "2"
+          envFrom:
+            - secretRef:
+                name: pr-agent-gitlab
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: claude-code-settings
+              mountPath: /etc/claude-code
+              readOnly: true
+            - name: claude-code-home
+              mountPath: /home/claude-code
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+      volumes:
+        - name: claude-code-settings
+          secret:
+            secretName: pr-agent-claude-code-settings
+            items:
+              - key: settings.json
+                path: settings.json
+        - name: claude-code-home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-agent
+  labels:
+    app.kubernetes.io/name: pr-agent
+spec:
+  selector:
+    app.kubernetes.io/name: pr-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pr-agent
+  labels:
+    app.kubernetes.io/name: pr-agent
+spec:
+  to:
+    kind: Service
+    name: pr-agent
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
