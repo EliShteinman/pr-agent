@@ -1,6 +1,22 @@
 FROM python:3.14.7-slim AS base
 COPY --from=ghcr.io/astral-sh/uv:0.12.10 /uv /uvx /bin/
 
+# Extra CA certificates from docker/ca-certificates/ (normally empty), trusted by every download in
+# the build and by the system store at runtime. Needed when building behind a TLS-inspecting proxy.
+# update-ca-certificates takes one certificate per file, so split exported multi-certificate bundles.
+COPY docker/ca-certificates/ /tmp/extra-ca/
+RUN set -eu; \
+    for bundle in /tmp/extra-ca/*.crt /tmp/extra-ca/*.pem; do \
+      [ -f "$bundle" ] || continue; \
+      name="$(basename "$bundle" | tr -c 'A-Za-z0-9\n' '_')"; \
+      awk -v prefix="/usr/local/share/ca-certificates/extra-${name}-" \
+        '/-----BEGIN CERTIFICATE-----/ {n++} n {print > (prefix n ".crt")}' "$bundle"; \
+    done; \
+    rm -rf /tmp/extra-ca; \
+    update-ca-certificates
+# uv verifies against its own bundled roots unless told to use the system store.
+ENV UV_SYSTEM_CERTS=1
+
 # litellm fetches its model cost map over the network at import time, so a
 # third-party change to that map can change runtime behavior with no image
 # change and no version bump. Use the map bundled with the litellm pinned in
@@ -78,6 +94,11 @@ RUN set -eux; \
 # GitLab runner start the container under an arbitrary UID in group 0, so HOME is group-writable.
 ENV HOME=/home/claude-code
 RUN mkdir -p "${HOME}" && chgrp 0 "${HOME}" && chmod 0775 "${HOME}"
+# Trust the system store, including any certificates added from docker/ca-certificates/: Python
+# HTTPS clients, git, the GitLab API client and, through SSL_CERT_FILE, the Claude Code CLI.
+# Mounting another bundle and pointing these variables at it overrides this.
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 # A container must not update its own CLI, and a gateway-only network has no route for telemetry.
 ENV DISABLE_AUTOUPDATER=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \

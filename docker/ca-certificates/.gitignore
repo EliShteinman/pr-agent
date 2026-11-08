@@ -1,0 +1,3 @@
+# Certificates dropped here are organization-specific; keep them out of the repository.
+*.crt
+*.pem

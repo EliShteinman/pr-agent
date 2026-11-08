@@ -197,6 +197,17 @@ docker push registry.example.com/pr-agent:gitlab-claude-code
 
 Add `--build-arg CLAUDE_CODE_VERSION=<version>` to pin a different CLI release, and `--platform linux/amd64` when building on an ARM machine for x86 runners.
 
+To build inside a network with a TLS-inspecting proxy, place the proxy's CA certificate (PEM, `.crt` or `.pem`) in `docker/ca-certificates/` and pass the proxy to the build. The certificate is then trusted by every download in the build and, at runtime, by PR-Agent and the Claude Code CLI:
+
+```bash
+cp corporate-ca.crt docker/ca-certificates/
+docker build -f docker/Dockerfile --target gitlab_claude_code \
+  --build-arg HTTP_PROXY=http://proxy.example.com:8080 --build-arg HTTPS_PROXY=http://proxy.example.com:8080 \
+  -t registry.example.com/pr-agent:gitlab-claude-code .
+```
+
+The Docker daemon pulls base images itself, so it must trust the same CA. Alternatively, build outside the internal network and bring the image in with `docker save` and `docker load`, then push it to the internal registry.
+
 ### The settings file
 
 Claude Code reads the gateway address and credentials from its `settings.json`:
